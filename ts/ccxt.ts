@@ -120,6 +120,7 @@ import krakenfutures from  './src/krakenfutures.js'
 import kucoin from  './src/kucoin.js'
 import kucoinfutures from  './src/kucoinfutures.js'
 import kuna from  './src/kuna.js'
+import kuru from  './src/kuru.js'
 import latoken from  './src/latoken.js'
 import lbank from  './src/lbank.js'
 import luno from  './src/luno.js'
@@ -305,6 +306,7 @@ const exchanges = {
     'kucoin':                 kucoin,
     'kucoinfutures':          kucoinfutures,
     'kuna':                   kuna,
+    'kuru':                   kuru,
     'latoken':                latoken,
     'lbank':                  lbank,
     'luno':                   luno,
@@ -628,6 +630,7 @@ export {
     kucoin,
     kucoinfutures,
     kuna,
+    kuru,
     latoken,
     lbank,
     luno,
