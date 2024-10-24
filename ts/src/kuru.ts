@@ -363,57 +363,117 @@ export default class kuru extends Exchange {
         return ohlcv;
     }
 
-    hashMessage (message) {
-        return '0x' + this.hash (message, keccak, 'hex');
-    }
-
-    signHash (hash, privateKey) {
-        const signature = ecdsa (hash.slice (-64), privateKey.slice (-64), secp256k1, undefined);
-        const r = signature['r'];
-        const s = signature['s'];
-        const v = this.intToBase16 (this.sum (27, signature['v']));
-        return '0x' + r.padStart (64, '0') + s.padStart (64, '0') + v;
-    }
-
-    signMessage (message, privateKey) {
-        return this.signHash (this.hashMessage (message), privateKey.slice (-64));
-    }
-
-    signMessageHash (messageHash, privateKeyHex) {
-        privateKeyHex = privateKeyHex.replace ('0x', '');
-        messageHash = messageHash.replace ('0x', '');
-        const privateKeyBytes = this.hexToBytes (privateKeyHex);
-        const messageHashBytes = this.hexToBytes (messageHash);
-        const signature = secp256k1.sign (messageHashBytes, privateKeyBytes);
-        const recoveryBit = signature.recovery;
-        const r = signature.r.toString (16).padStart (64, '0');
-        const s = signature.s.toString (16).padStart (64, '0');
-        const v = recoveryBit + 27;
-        const signatureHex = r + s + v.toString (16).padStart (2, '0');
-        return '0x' + signatureHex;
-    }
-
-    hexToBytes (hex) {
-        const bytes = new Uint8Array (hex.length / 2);
-        for (let i = 0; i < bytes.length; i++) {
-            const hexByte = hex.substr (i * 2, 2);
-            bytes[i] = parseInt (hexByte, 16);
+    async fetchOrder (id: string, symbol: Str = undefined, params = {}): Promise<Order> {
+        const marketAddress = params['marketAddress'];
+        if (!marketAddress) {
+            throw new Error ('marketAddress is required');
         }
-        return bytes;
+        const request: Dict = {
+            'marketAddress': marketAddress,
+            'orderId': id,
+        };
+        const response = await this.fetchData ('fetchOrder', request);
+        return this.parseOrder (response);
     }
 
-    signUserSignedAction (messageTypes, message) {
-        const verifyingContract = this.safeString (this.options, 'kuruForwarder');
-        const chainId = this.safeNumber (this.options, 'chainId');
-        const domain: Dict = {
-            'name': 'KuruForwarder',
-            'version': '1.0.0',
-            'chainId': chainId,
-            'verifyingContract': verifyingContract,
+    async fetchOpenOrders (symbol?: Str, since?: Int, limit?: Int, params?: {}): Promise<Order[]> {
+        const marketAddress = params['marketAddress'];
+        if (!marketAddress) {
+            throw new Error ('marketAddress is required');
+        }
+        const request: Dict = {
+            'marketAddress': marketAddress,
+            'userAddress': this.walletAddress,
+            'since': since,
+            'limit': limit,
+            'offset': params['offset'] ? params['offset'] : 0,
         };
-        const msg = this.createEip712Hash (domain, messageTypes, message);
-        const signature = this.signMessageHash (msg, this.privateKey);
-        return signature;
+        const response = await this.fetchData ('fetchOpenOrders', request);
+        const openOrders = response['data'].map ((orderData) => this.parseOrder (orderData));
+        return openOrders; // TODO: Parse orders
+    }
+
+    async fetchClosedOrders (symbol?: Str, since?: Int, limit?: Int, params?: {}): Promise<Order[]> {
+        const marketAddress = params['marketAddress'];
+        if (!marketAddress) {
+            throw new Error ('marketAddress is required');
+        }
+        const request: Dict = {
+            'marketAddress': marketAddress,
+            'userAddress': this.walletAddress,
+            'since': since,
+            'limit': limit,
+            'offset': params['offset'] ? params['offset'] : 0,
+        };
+        const response = await this.fetchData ('fetchClosedOrders', request);
+        const closedOrders = response['data'].map ((orderData) => this.parseOrder (orderData));
+        return closedOrders;
+    }
+
+    async fetchCancelledOrders (symbol?: Str, since?: Int, limit?: Int, params?: {}): Promise<Order[]> {
+        const marketAddress = params['marketAddress'];
+        if (!marketAddress) {
+            throw new Error ('marketAddress is required');
+        }
+        const request: Dict = {
+            'marketAddress': marketAddress,
+            'userAddress': this.walletAddress,
+            'since': since,
+            'limit': limit,
+            'offset': params['offset'] ? params['offset'] : 0,
+        };
+        const response = await this.fetchData ('fetchCancelledOrders', request);
+        const cancelledOrders = response['data'].map ((orderData) => this.parseOrder (orderData));
+        return cancelledOrders;
+    }
+
+    parseOrder (orderData: Dict): Order {
+        let status;
+        if (orderData['is_cancelled']) {
+            status = 'canceled';
+        } else if (orderData['remaining_size'] === 0) {
+            status = 'closed';
+        } else {
+            status = 'open';
+        }
+        const order: Order = {
+            'id': orderData['order_id'],
+            'symbol': orderData['symbol'],
+            'trades': undefined,
+            'reduceOnly': false,
+            'postOnly': false,
+            'type': 'limit',
+            'side': orderData['is_buy'] ? 'buy' : 'sell',
+            'price': orderData['price'],
+            'amount': orderData['size'],
+            'cost': undefined,
+            'filled': orderData['filled'],
+            'remaining': orderData['size'] - orderData['remaining_size'],
+            'status': status,
+            'timestamp': orderData['trigger_time'], // TODO: converty it to timestamp
+            'datetime': orderData['trigger_time'],
+            'fee': orderData['fee'],
+            'info': undefined,
+            'clientOrderId': orderData['order_id'],
+            'lastTradeTimestamp': 0,
+        };
+        return order;
+    }
+
+    async fetchMyTrades (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Trade[]> {
+        const marketAddress = params['marketAddress'];
+        if (!marketAddress) {
+            throw new Error ('marketAddress is required');
+        }
+        const request: Dict = {
+            'marketAddress': marketAddress,
+            'userAddress': this.walletAddress,
+            'since': since,
+            'limit': limit,
+            'offset': params['offset'] ? params['offset'] : 0,
+        };
+        const response = await this.fetchData ('fetchMyTrades', request);
+        return response; // TODO: Parse trades
     }
 
     async createOrder (
@@ -511,6 +571,59 @@ export default class kuru extends Exchange {
         // Submit the cancel request
         const response = await this.postData ('cancelOrders', forwardRequestData);
         return response; // TODO: Parse response
+    }
+
+    hashMessage (message) {
+        return '0x' + this.hash (message, keccak, 'hex');
+    }
+
+    signHash (hash, privateKey) {
+        const signature = ecdsa (hash.slice (-64), privateKey.slice (-64), secp256k1, undefined);
+        const r = signature['r'];
+        const s = signature['s'];
+        const v = this.intToBase16 (this.sum (27, signature['v']));
+        return '0x' + r.padStart (64, '0') + s.padStart (64, '0') + v;
+    }
+
+    signMessage (message, privateKey) {
+        return this.signHash (this.hashMessage (message), privateKey.slice (-64));
+    }
+
+    signMessageHash (messageHash, privateKeyHex) {
+        privateKeyHex = privateKeyHex.replace ('0x', '');
+        messageHash = messageHash.replace ('0x', '');
+        const privateKeyBytes = this.hexToBytes (privateKeyHex);
+        const messageHashBytes = this.hexToBytes (messageHash);
+        const signature = secp256k1.sign (messageHashBytes, privateKeyBytes);
+        const recoveryBit = signature.recovery;
+        const r = signature.r.toString (16).padStart (64, '0');
+        const s = signature.s.toString (16).padStart (64, '0');
+        const v = recoveryBit + 27;
+        const signatureHex = r + s + v.toString (16).padStart (2, '0');
+        return '0x' + signatureHex;
+    }
+
+    hexToBytes (hex) {
+        const bytes = new Uint8Array (hex.length / 2);
+        for (let i = 0; i < bytes.length; i++) {
+            const hexByte = hex.substr (i * 2, 2);
+            bytes[i] = parseInt (hexByte, 16);
+        }
+        return bytes;
+    }
+
+    signUserSignedAction (messageTypes, message) {
+        const verifyingContract = this.safeString (this.options, 'kuruForwarder');
+        const chainId = this.safeNumber (this.options, 'chainId');
+        const domain: Dict = {
+            'name': 'KuruForwarder',
+            'version': '1.0.0',
+            'chainId': chainId,
+            'verifyingContract': verifyingContract,
+        };
+        const msg = this.createEip712Hash (domain, messageTypes, message);
+        const signature = this.signMessageHash (msg, this.privateKey);
+        return signature;
     }
 
     createForwardRequestData (marketAddress: String, encodedData: any) {
