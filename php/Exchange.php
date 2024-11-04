@@ -408,6 +408,7 @@ class Exchange {
         'kucoin',
         'kucoinfutures',
         'kuna',
+        'kuru',
         'latoken',
         'lbank',
         'luno',

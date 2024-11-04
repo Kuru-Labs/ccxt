@@ -86,6 +86,7 @@ var krakenfutures = require('./src/krakenfutures.js');
 var kucoin = require('./src/kucoin.js');
 var kucoinfutures = require('./src/kucoinfutures.js');
 var kuna = require('./src/kuna.js');
+var kuru = require('./src/kuru.js');
 var latoken = require('./src/latoken.js');
 var lbank = require('./src/lbank.js');
 var luno = require('./src/luno.js');
@@ -272,6 +273,7 @@ const exchanges = {
     'kucoin': kucoin,
     'kucoinfutures': kucoinfutures,
     'kuna': kuna,
+    'kuru': kuru,
     'latoken': latoken,
     'lbank': lbank,
     'luno': luno,
@@ -505,6 +507,7 @@ exports.krakenfutures = krakenfutures;
 exports.kucoin = kucoin;
 exports.kucoinfutures = kucoinfutures;
 exports.kuna = kuna;
+exports.kuru = kuru;
 exports.latoken = latoken;
 exports.lbank = lbank;
 exports.luno = luno;

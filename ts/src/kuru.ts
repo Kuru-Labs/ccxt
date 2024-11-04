@@ -1,16 +1,19 @@
 import Exchange from './abstract/kuru.js';
 import type {
     Market,
+    Order,
     Dict,
     Int,
     OrderBook,
     OHLCV,
     Num,
-
-    Order,
     OrderSide,
     OrderType,
     Str,
+    Trade,
+    Transaction,
+    OrderRequest,
+    Bool,
 } from './base/types.js';
 import {
     InvalidOrder,
@@ -19,19 +22,14 @@ import {
 import {
     DECIMAL_PLACES,
 } from './base/functions/number.js';
-import { keccak_256 as keccak, sha3_256 } from './static_dependencies/noble-hashes/sha3.js';
+import { keccak_256 as keccak } from './static_dependencies/noble-hashes/sha3.js';
 import { secp256k1 } from './static_dependencies/noble-curves/secp256k1.js';
 import { ecdsa } from './base/functions/crypto.js';
+// eslint-disable-next-line no-shadow
 import fetch from './static_dependencies/node-fetch/index.js';
-import { Fragment, Interface } from './static_dependencies/ethers/index.js';
-import { concat, hexlify } from './static_dependencies/ethers/utils/data.js';
-import { TypedDataEncoder } from './static_dependencies/ethers/hash/typed-data';
+import { Interface } from './static_dependencies/ethers/index.js';
 import { hexToBytes } from './static_dependencies/noble-hashes/utils.js';
 import { AbiCoder } from './static_dependencies/ethers/abi-coder.js';
-import { toUtf8Bytes } from './static_dependencies/ethers/utils/utf8.js';
-import { solidityPacked, solidityPackedKeccak256 } from './static_dependencies/ethers/hash/solidity.js';
-import { encodeBytes32String } from './static_dependencies/ethers/bytes32';
-import { padLeft } from './static_dependencies/starknet/utils/encode';
 
 export default class kuru extends Exchange {
     describe () {
@@ -239,6 +237,13 @@ export default class kuru extends Exchange {
     }
 
     async fetchMarkets (params = {}): Promise<Market[]> {
+        /**
+         * @method
+         * @name kuru#fetchMarkets
+         * @description retrieves data on all markets for kuru
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @returns {Market[]} an array of objects representing market data
+         */
         const markets = await this.fetchData ('fetchMarkets', {});
         return this.parseMarkets (markets['data']);
     }
@@ -337,12 +342,24 @@ export default class kuru extends Exchange {
     }
 
     async fetchOHLCV (symbol: string, timeframe = '1m', since: Int = undefined, limit: Int = undefined, params = {}): Promise<OHLCV[]> {
+        /**
+         * @method
+         * @name kuru#fetchOHLCV
+         * @description retrieves OHLCV (Open, High, Low, Close, Volume) data for a specific market
+         * @param {string} symbol the symbol of the market to fetch OHLCV data for
+         * @param {string} [timeframe='1m'] the timeframe to fetch OHLCV data for
+         * @param {Int} [since] the timestamp to fetch OHLCV data from
+         * @param {Int} [limit] the maximum number of OHLCV data points to fetch
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @returns {OHLCV[]} an array of OHLCV data points
+         * @throws {Error} if marketAddress or since is not provided in params
+         */
         const marketAddressOHLCV = params['marketAddress'];
         if (!marketAddressOHLCV) {
             throw new Error ('marketAddress is required');
         }
         if (!since) {
-            since = 1728205695000;
+            throw new Error ('since is required');
         }
         const request: Dict = {
             'marketAddress': marketAddressOHLCV,
@@ -364,6 +381,16 @@ export default class kuru extends Exchange {
     }
 
     async fetchOrder (id: string, symbol: Str = undefined, params = {}): Promise<Order> {
+        /**
+         * @method
+         * @name kuru#fetchOrder
+         * @description retrieves data on a specific order for kuru
+         * @param {string} id the ID of the order to fetch
+         * @param {string} [symbol] the symbol of the market to fetch the order for
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @returns {Order} an object representing the order data
+         * @throws {Error} if marketAddress is not provided in params
+         */
         const marketAddress = params['marketAddress'];
         if (!marketAddress) {
             throw new Error ('marketAddress is required');
@@ -394,6 +421,16 @@ export default class kuru extends Exchange {
     }
 
     async fetchClosedOrders (symbol?: Str, since?: Int, limit?: Int, params?: {}): Promise<Order[]> {
+        /**
+         * @method
+         * @name kuru#fetchOrder
+         * @description retrieves data on a specific order for kuru
+         * @param {string} id the ID of the order to fetch
+         * @param {string} [symbol] the symbol of the market to fetch the order for
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @returns {Order} an object representing the order data
+         * @throws {Error} if marketAddress is not provided in params
+         */
         const marketAddress = params['marketAddress'];
         if (!marketAddress) {
             throw new Error ('marketAddress is required');
@@ -411,6 +448,16 @@ export default class kuru extends Exchange {
     }
 
     async fetchCancelledOrders (symbol?: Str, since?: Int, limit?: Int, params?: {}): Promise<Order[]> {
+        /**
+         * @method
+         * @name kuru#fetchOrder
+         * @description retrieves data on a specific order for kuru
+         * @param {string} id the ID of the order to fetch
+         * @param {string} [symbol] the symbol of the market to fetch the order for
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @returns {Order} an object representing the order data
+         * @throws {Error} if marketAddress is not provided in params
+         */
         const marketAddress = params['marketAddress'];
         if (!marketAddress) {
             throw new Error ('marketAddress is required');
@@ -425,6 +472,33 @@ export default class kuru extends Exchange {
         const response = await this.fetchData ('fetchCancelledOrders', request);
         const cancelledOrders = response['data'].map ((orderData) => this.parseOrder (orderData));
         return cancelledOrders;
+    }
+
+    async fetchStatus (params?: {}): Promise<any> {
+        /**
+         * @method
+         * @name kuru#fetchStatus
+         * @description retrieves the status of a specific order for kuru
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} params.marketAddress the address of the market
+         * @param {string} params.orderId the ID of the order to fetch the status for
+         * @returns {any} the status of the order
+         * @throws {Error} if marketAddress or orderId is not provided in params
+         */
+        const marketAddress = params['marketAddress'];
+        if (!marketAddress) {
+            throw new Error ('marketAddress is required');
+        }
+        const orderId = params['orderId'];
+        if (!orderId) {
+            throw new Error ('orderId is required');
+        }
+        const request: Dict = {
+            'marketAddress': marketAddress,
+            'orderId': orderId,
+        };
+        const response = await this.fetchData ('fetchStatus', request);
+        return response;
     }
 
     parseOrder (orderData: Dict): Order {
@@ -460,7 +534,45 @@ export default class kuru extends Exchange {
         return order;
     }
 
+    async fetchTrades (symbol: string, since?: Int, limit?: Int, params?: {}): Promise<Trade[]> {
+        /**
+         * @method
+         * @name kuru#fetchTrades
+         * @description retrieves trade data for a specific market
+         * @param {string} symbol the symbol of the market to fetch trades for
+         * @param {Int} [since] the timestamp to fetch trades from
+         * @param {Int} [limit] the maximum number of trades to fetch
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @returns {Trade[]} an array of objects representing trade data
+         * @throws {Error} if marketAddress is not provided in params
+         */
+        const marketAddress = params['marketAddress'];
+        if (!marketAddress) {
+            throw new Error ('marketAddress is required');
+        }
+        const request: Dict = {
+            'marketAddress': marketAddress,
+            'since': since,
+            'limit': limit,
+            'offset': params['offset'] ? params['offset'] : 0,
+        };
+        const response = await this.fetchData ('fetchTrades', request);
+        const trades = response['data'].map ((tradeData) => this.parseTrade (tradeData));
+        return trades;
+    }
+
     async fetchMyTrades (symbol: Str = undefined, since: Int = undefined, limit: Int = undefined, params = {}): Promise<Trade[]> {
+        /**
+         * @method
+         * @name kuru#fetchTrades
+         * @description retrieves trade data for a specific market
+         * @param {string} symbol the symbol of the market to fetch trades for
+         * @param {Int} [since] the timestamp to fetch trades from
+         * @param {Int} [limit] the maximum number of trades to fetch
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @returns {Trade[]} an array of objects representing trade data
+         * @throws {Error} if marketAddress is not provided in params
+         */
         const marketAddress = params['marketAddress'];
         if (!marketAddress) {
             throw new Error ('marketAddress is required');
@@ -473,7 +585,27 @@ export default class kuru extends Exchange {
             'offset': params['offset'] ? params['offset'] : 0,
         };
         const response = await this.fetchData ('fetchMyTrades', request);
-        return response; // TODO: Parse trades
+        const myTrades = response['data'].map ((tradeData) => this.parseTrade (tradeData));
+        return myTrades;
+    }
+
+    parseTrade (tradeData: Dict): Trade {
+        const trade: Trade = {
+            'info': undefined,
+            'amount': tradeData['filledSize'],
+            'datetime': tradeData['trigger_time'],
+            'id': tradeData['order_id'],
+            'price': tradeData['price'],
+            'timestamp': new Date (tradeData['trigger_time']).getTime (),
+            'type': undefined,
+            'side': tradeData['is_buy'] ? 'buy' : 'sell',
+            'symbol': tradeData['symbol'],
+            'cost': undefined,
+            'fee': undefined,
+            'order': tradeData['order_id'],
+            'takerOrMaker': undefined,
+        };
+        return trade;
     }
 
     async createOrder (
@@ -484,7 +616,19 @@ export default class kuru extends Exchange {
         price?: Num,
         params?: {}
     ): Promise<Order> {
-        // Validate inputs based on order type
+        /**
+         * @method
+         * @name kuru#createOrder
+         * @description creates a new order for a specific market
+         * @param {string} symbol the symbol of the market to create the order for
+         * @param {OrderType} type the type of the order (limit or market)
+         * @param {OrderSide} side the side of the order (buy or sell)
+         * @param {number} amount the amount of the order
+         * @param {Num} [price] the price of the order (required for limit orders)
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @returns {Order} an object representing the created order
+         * @throws {Error} if required parameters for the order type are not provided
+         */
         if (type === 'limit') {
             if (!price) {
                 throw new Error ('Price is required for limit orders');
@@ -558,19 +702,144 @@ export default class kuru extends Exchange {
         const encodedData = iface.encodeFunctionData (config.functionCall, parameters);
         const forwardRequestData = this.createForwardRequestData (params['marketAddress'], encodedData);
         const response = await this.postData ('createOrder', forwardRequestData);
-        return response; // TODO: Parse Order
+        const order = this.parseCreatedOrderResponse (response, type, side, price, amount, params['postOnly']);
+        return order;
+    }
+
+    parseCreatedOrderResponse (response: Dict, orderType: Str, orderSide: Str, price: number, amount: number, postOnly: Bool): Order {
+        const order: Order = {
+            'id': response['order_id'],
+            'clientOrderId': response['order_id'],
+            'datetime': new Date ().toISOString (),
+            'timestamp': new Date ().getTime (),
+            'lastTradeTimestamp': undefined,
+            'status': 'open',
+            'symbol': response['symbol'],
+            'type': orderType,
+            'timeInForce': undefined,
+            'side': orderSide,
+            'average': undefined,
+            'price': price,
+            'amount': amount,
+            'filled': undefined,
+            'remaining': undefined,
+            'stopPrice': undefined,
+            'triggerPrice': undefined,
+            'takeProfitPrice': undefined,
+            'stopLossPrice': undefined,
+            'cost': undefined,
+            'trades': undefined,
+            'fee': undefined,
+            'reduceOnly': undefined,
+            'postOnly': postOnly,
+            'info': response,
+        };
+        return order;
+    }
+
+    async createOrders (orders: OrderRequest[], params?: {}): Promise<any> {
+        /**
+         * @method
+         * @name kuru#createOrders
+         * @description creates multiple new orders for a specific market
+         * @param {OrderRequest[]} orders an array of order requests to create
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @param {string} params.marketAddress the address of the market
+         * @param {boolean} params.postOnly whether the orders should be post-only
+         * @returns {any} the response from the exchange API
+         * @throws {Error} if marketAddress or postOnly is not provided in params
+         */
+        const marketAddress = params['marketAddress'];
+        if (!marketAddress) {
+            throw new Error ('marketAddress is required');
+        }
+        if (!params['postOnly'] === undefined) {
+            throw new Error ('postOnly is required for batch orders');
+        }
+        const buyPrices = [];
+        const buySizes = [];
+        const sellPrices = [];
+        const sellSizes = [];
+        for (let i = 0; i < orders.length; i++) {
+            const order = orders[i];
+            if (order['type'] === 'market') {
+                throw new Error ('Market orders are not supported in batch orders');
+            }
+            const side = order['side'];
+            if (side === 'buy') {
+                buyPrices.push (order['price']);
+                buySizes.push (order['amount']);
+            } else if (side === 'sell') {
+                sellPrices.push (order['price']);
+                sellSizes.push (order['amount']);
+            }
+        }
+        const functionSignature = 'batchUpdate(uint24[] calldata buyPrices,uint96[] calldata buySizes,uint24[] calldata sellPrices,uint96[] calldata sellSizes,uint40[] calldata orderIdsToCancel,bool postOnly)';
+        const iface = new Interface ([ functionSignature ]);
+        const encodedData = iface.encodeFunctionData ('batchUpdate', [ buyPrices, buySizes, sellPrices, sellSizes, [], params['postOnly'] ]);
+        const forwardRequestData = this.createForwardRequestData (marketAddress, encodedData);
+        const response = await this.postData ('createOrder', forwardRequestData);
+        return response;
     }
 
     async cancelOrders (ids: string[], symbol: Str = undefined, params = {}) {
-        // Create function signature and encode data
+        /**
+         * @method
+         * @name kuru#cancelOrders
+         * @description cancels multiple orders for a specific market
+         * @param {string[]} ids an array of order IDs to cancel
+         * @param {string} [symbol] the symbol of the market to cancel orders for
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @returns {any} the response from the exchange API
+         * @throws {Error} if marketAddress is not provided in params
+         */
         const functionSignature = 'function batchCancelOrders(uint40[] _orderIds)';
         const iface = new Interface ([ functionSignature ]);
         const encodedData = iface.encodeFunctionData ('batchCancelOrders', [ ids ]);
-        // Create forward request
         const forwardRequestData = this.createForwardRequestData (params['marketAddress'], encodedData);
-        // Submit the cancel request
         const response = await this.postData ('cancelOrders', forwardRequestData);
-        return response; // TODO: Parse response
+        return response;
+    }
+
+    async deposit (amount: number, address: string, params = {}) {
+        /**
+         * @method
+         * @name kuru#cancelOrders
+         * @description cancels multiple orders for a specific market
+         * @param {string[]} ids an array of order IDs to cancel
+         * @param {string} [symbol] the symbol of the market to cancel orders for
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @returns {any} the response from the exchange API
+         * @throws {Error} if marketAddress is not provided in params
+         */
+        if (!params['marginAccount']) {
+            throw new Error ('marginAccount is required');
+        }
+        const functionSignature = 'function deposit(address _user, address _token, uint256 _amount)';
+        const iface = new Interface ([ functionSignature ]);
+        const encodedData = iface.encodeFunctionData ('deposit', [ this.walletAddress, address, amount ]);
+        const forwardRequestData = this.createMarginAccountRequest (params['marginAccount'], encodedData);
+        const response = await this.postData ('deposit', forwardRequestData);
+        return response as Transaction; // TODO: Parse response
+    }
+
+    async withdraw (code: string, amount: number, address: string, tag = undefined, params = {}): Promise<Transaction> {
+        /**
+         * @method
+         * @name kuru#cancelOrders
+         * @description cancels multiple orders for a specific market
+         * @param {string[]} ids an array of order IDs to cancel
+         * @param {string} [symbol] the symbol of the market to cancel orders for
+         * @param {object} [params] extra parameters specific to the exchange API endpoint
+         * @returns {any} the response from the exchange API
+         * @throws {Error} if marketAddress is not provided in params
+         */
+        const functionSignature = 'function withdraw(uint256 _amount, address _token)';
+        const iface = new Interface ([ functionSignature ]);
+        const encodedData = iface.encodeFunctionData ('withdraw', [ amount, address ]);
+        const forwardRequestData = this.createForwardRequestData (params['marketAddress'], encodedData);
+        const response = await this.postData ('withdraw', forwardRequestData);
+        return response as Transaction; // TODO: Parse response
     }
 
     hashMessage (message) {
@@ -624,6 +893,47 @@ export default class kuru extends Exchange {
         const msg = this.createEip712Hash (domain, messageTypes, message);
         const signature = this.signMessageHash (msg, this.privateKey);
         return signature;
+    }
+
+    signMarginAccountAction (messageTypes, message) {
+        const verifyingContract = this.safeString (this.options, 'kuruForwarder');
+        const chainId = this.safeNumber (this.options, 'chainId');
+        const domain: Dict = {
+            'name': 'KuruForwarder',
+            'version': '1.0.0',
+            'chainId': chainId,
+            'verifyingContract': verifyingContract,
+        };
+        const msg = this.createEip712HashMargin (domain, messageTypes, message);
+        const signature = this.signMessageHash (msg, this.privateKey);
+        return signature;
+    }
+
+    createMarginAccountRequest (marginAccount: String, encodedData: any) {
+        const msgTypes = {
+            'MarginAccountRequest': [
+                { 'name': 'from', 'type': 'address' },
+                { 'name': 'marginAccount', 'type': 'address' },
+                { 'name': 'value', 'type': 'uint256' },
+                { 'name': 'nonce', 'type': 'uint256' },
+                { 'name': 'data', 'type': 'bytes' },
+            ],
+        };
+        const marginAccountRequest = {
+            'from': this.walletAddress,
+            'marginAccount': marginAccount,
+            'value': '0',
+            'nonce': this.milliseconds ().toString (),
+            'data': encodedData,
+        };
+        console.log ('marginAccountRequest:', marginAccountRequest);
+        const signature = this.signMarginAccountAction (msgTypes, marginAccountRequest);
+        console.log ('signature:', signature);
+        const requestData = {
+            'marginRequest': marginAccountRequest,
+            signature,
+        };
+        return requestData;
     }
 
     createForwardRequestData (marketAddress: String, encodedData: any) {
@@ -738,6 +1048,38 @@ export default class kuru extends Exchange {
             )
         );
         return structHash;
+    }
+
+    hashMarginAccountRequest (requestType, request) {
+        // Hash the data field first
+        const dataHash = this.keccak256EncodedData (request.data);
+        // Hash the structured data
+        const structHash = this.keccak256EncodedData (
+            AbiCoder.defaultAbiCoder ().encode (
+                [ 'bytes32', 'address', 'address', 'uint256', 'uint256', 'bytes' ],
+                [
+                    this.hashMessage (
+                        'MarginAccountRequest(address from,address marginAccount,uint256 value,uint256 nonce,bytes data)'
+                    ),
+                    request.from,
+                    request.marginAccount,
+                    request.value,
+                    request.nonce,
+                    dataHash,
+                ]
+            )
+        );
+        return structHash;
+    }
+
+    createEip712HashMargin (domain, msgTypes, message) {
+        const domainSeparator = this.hashDomain (domain);
+        const structHash = this.hashMarginAccountRequest (msgTypes, message);
+        const abiEncodedfinalMsg = `0x1901${domainSeparator.slice (2)}${structHash.slice (2)}`;
+        const finalHash = this.keccak256EncodedData (
+            abiEncodedfinalMsg
+        );
+        return finalHash;
     }
 
     createEip712Hash (domain, msgTypes, message) {

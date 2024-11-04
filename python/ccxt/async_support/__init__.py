@@ -137,6 +137,7 @@ from ccxt.async_support.krakenfutures import krakenfutures                      
 from ccxt.async_support.kucoin import kucoin                                    # noqa: F401
 from ccxt.async_support.kucoinfutures import kucoinfutures                      # noqa: F401
 from ccxt.async_support.kuna import kuna                                        # noqa: F401
+from ccxt.async_support.kuru import kuru                                        # noqa: F401
 from ccxt.async_support.latoken import latoken                                  # noqa: F401
 from ccxt.async_support.lbank import lbank                                      # noqa: F401
 from ccxt.async_support.luno import luno                                        # noqa: F401
@@ -247,6 +248,7 @@ exchanges = [
     'kucoin',
     'kucoinfutures',
     'kuna',
+    'kuru',
     'latoken',
     'lbank',
     'luno',
